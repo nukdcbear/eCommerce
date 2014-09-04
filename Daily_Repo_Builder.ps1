@@ -37,7 +37,7 @@ function Main
     [string] $repoWorkingDir = $env:ECOM_REPO_WORKING_DIR
     [string] $archiveDir = $env:ECOM_DROPS_ARCHIVE_DIR
     [string] $ecomDropsDir = $env:ECOM_DROPS_DIR
-    [string] $rootDir = $env:$VL_CHANNEL_ROOT
+    [string] $rootDir = $env:VL_CHANNEL_ROOT
 
 	# Property names on Packages
     [string] $bugPropertyName = "NUMBER"
@@ -153,7 +153,7 @@ function Main
     $timeStamp = Get-Date -f "yyyyMMdd_HHmmss"
     $archiveFile = $envType + "_" + $timeStamp + "_" + $manifestFile 
     Write-Host "Archiving the $rootDir$ecomDropsDir\$manifestFile to $archiveDir\$archiveFile."
-    Move-Item $rootDir$repoWorkingDir\$manifestFile $archiveDir\$archiveFile -force
+    Move-Item $rootDir$ecomDropsDir\$manifestFile $archiveDir\$archiveFile -force
 
     Start-Sleep -m 30000
 	Write-Host " "
