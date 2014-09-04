@@ -7,7 +7,7 @@
 #############################################################################
 
 # Custom Tiffany action to create Daily Repos from a manifest file
-# V3.0.7
+# V3.0.8
 
 function Main 
 {
@@ -35,6 +35,9 @@ function Main
 
     # Working directory to build repo from
     [string] $repoWorkingDir = $env:ECOM_REPO_WORKING_DIR
+    [string] $archiveDir = $env:ECOM_DROPS_ARCHIVE_DIR
+    [string] $ecomDropsDir = $env:ECOM_DROPS_DIR
+    [string] $rootDir = $env:$VL_CHANNEL_ROOT
 
 	# Property names on Packages
     [string] $bugPropertyName = "NUMBER"
@@ -85,7 +88,7 @@ function Main
 	$input = Get-Content $repoWorkingDir\$manifestFile
 
  	$input
-
+ 	
 	Write-Host " "
 	Write-Host "**************************************"
 	Write-Host "Creating Instances"
@@ -145,7 +148,14 @@ function Main
 		}
 	}
 
- Start-Sleep -m 30000
+ 	# Archive the manifestfile
+ 	# Get time stamp
+    $timeStamp = Get-Date -f "yyyyMMdd_HHmmss"
+    $archiveFile = $envType + "_" + $timeStamp + "_" + $manifestFile 
+    Write-Host "Archiving the $rootDir$ecomDropsDir\$manifestFile to $archiveDir\$archiveFile."
+    Move-Item $rootDir$repoWorkingDir\$manifestFile $archiveDir\$archiveFile -force
+
+    Start-Sleep -m 30000
 	Write-Host " "
 	Write-Host "**************************************"
 	Write-Host "Creating Repo"
