@@ -7,7 +7,7 @@
 #############################################################################
 
 # Custom Tiffany action to create Daily Repos from a manifest file
-# V3.0.8
+# V3.0.10
 
 function Main 
 {
@@ -251,13 +251,13 @@ function CreateRepo($tcoList,$tcosharedList) {
 	$lastPackInst = $tcoWebContentPushPackage + ":Master.1"
 	
     # Add Web.config Update package to Repo
-    write-host "Adding instance of $tcoWebConfigPushPackage to $repoName"
-    Write-host "repo artifact add instance $repoName ${tcoWebConfigPushPackage}:Master.1"
-    RunAPICommand "repo artifact add instance $repoName ${tcoWebConfigPushPackage}:Master.1"
-    start-sleep -m 1000
-	write-host "repo artifact depend add $repoName ${tcoWebConfigPushPackage}:Master.1 $lastPackInst"
-    RunAPICommand "repo artifact depend add $repoName ${tcoWebConfigPushPackage}:Master.1 $lastPackInst"
-    $lastPackInst = $tcoWebConfigPushPackage + ":Master.1"
+#    write-host "Adding instance of $tcoWebConfigPushPackage to $repoName"
+#    Write-host "repo artifact add instance $repoName ${tcoWebConfigPushPackage}:Master.1"
+#    RunAPICommand "repo artifact add instance $repoName ${tcoWebConfigPushPackage}:Master.1"
+#    start-sleep -m 1000
+#    write-host "repo artifact depend add $repoName ${tcoWebConfigPushPackage}:Master.1 $lastPackInst"
+#    RunAPICommand "repo artifact depend add $repoName ${tcoWebConfigPushPackage}:Master.1 $lastPackInst"
+#    $lastPackInst = $tcoWebConfigPushPackage + ":Master.1"
     
 	# Add Web Sync package to Repo
 	write-host "Adding instance of $tcoWebSyncPackage to $repoName"
