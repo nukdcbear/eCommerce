@@ -140,6 +140,9 @@ function Main
 			    }
 			    $buildIDs += $buildID
 			    CreateInstance $deployType $eType $buildID $fileName
+			    
+			    # Cleanup on aisle 3, the zip file spill
+			    Remove-Item $repoWorkingDir\$fullfileName
 		    }
 		    else {
 			    write-error "Deploy type is not tco or tco shared, exiting."
@@ -166,7 +169,7 @@ function Main
 	CreateRepo $tcoInstances $tcosharedInstances
 
 	write-host "Repo $repoName Created"
-
+	
 	exit 0
 
 }
