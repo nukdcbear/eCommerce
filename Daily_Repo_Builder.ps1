@@ -8,7 +8,7 @@
 #############################################################################
 
 # Custom Tiffany action to create Daily Repos directly from NAS OR from a manifest file
-# V5.0.0
+# V5.1.2
 
 [CmdletBinding()]
 Param (
@@ -27,9 +27,9 @@ function Main
     ##########################################
 
     # API Connection Information
-    [string] $remoteHost = "tcowbvlqt01"
+    [string] $remoteHost = "tcowbvlqp01"
     [int] $port = 50000
-    [string] $vlusertoken = "53f21ba1-6978-4159-a720-0690ac147e8b"
+    [string] $vlusertoken = "54233f32-d984-4b0a-ba3a-0f64ac100a39"
         
     # NAS Path info
     [string] $nasPathQA = $env:ECOM_QA_NAS_PATH
@@ -48,8 +48,13 @@ function Main
     [string] $ecomWebSyncPackage = $env:ECOM_WEB_SYNC_PACKAGE
     [string] $ecomWebSiteBackupPackage = $env:ECOM_WEBSITE_BACKUP_PACKAGE
     [string] $ecomWebContentPushPackage = $env:ECOM_WEBCONTENT_PUSH_PACKAGE
-    [string] $ecomWebSyncPackage = $env:ECOM_WEB_SYNC_PACKAGE
     [string] $ecomWebSyncLBRepo = $env:ECOM_WEB_SYNC_LB_REPO
+    [STRING] $ecomProdInitHoldPackage = $env:ECOM_PROD_INITIATE_HOLD_PACKAGE
+    [string] $tcoPackageNameQA = $env:TCOGLOBALSITE_PACKAGE_QA
+    [string] $tcosharedPackageNameQA = $env:TCOSHARED_PACKAGE_QA
+    [string] $ecomWebSyncPackageQA = $env:ECOM_WEB_SYNC_PACKAGE_QA
+    [string] $ecomWebSiteBackupPackageQA = $env:ECOM_WEBSITE_BACKUP_PACKAGE_QA
+    [string] $ecomWebContentPushPackageQA = $env:ECOM_WEBCONTENT_PUSH_PACKAGE_QA
 
     # Working directory to build repo from
     [string] $repoWorkingDir = $env:ECOM_REPO_WORKING_DIR
@@ -88,7 +93,7 @@ function Main
 	## Open the socket, and connect to RPD on the $remoteHost on the specified port 
 	write-host "Connecting to $remoteHost on port $port" 
 
-	trap { Write-Error "Could not connect to remote computer: $_"; exit 3} 
+	trap { Write-Host "Could not connect to remote computer: $_"; exit 3} 
 	$socket = new-object System.Net.Sockets.TcpClient($remoteHost, $port)
 
 	write-host "Connected. `n" 
@@ -152,7 +157,14 @@ function Main
     	    Write-Host " Processing the $type code drop directory $naspath"
     	    $dirnames = Get-ChildItem $naspath -name | Where-Object {$_ -match "\d\d\d\d\d\d\d\d"}
     	    
+    	    # Loop through each dated directory in search of daily-manifest.dat file for processing
+    	    # One Repo for each directory will be created.
             foreach ($directory in $dirnames) {
+                # Make sure the instance lists are reset for each directory processed
+                $tcoInstances=@()
+                $tcosharedInstances=@()
+	            $buildIDs=@()
+
                 # Check for existence of manifest file in the code drop dir
     	        $foundmanifest = $false
                 if (Test-Path("$naspath\$directory\$manifestFile")) {
@@ -179,7 +191,7 @@ function Main
                 	# Create Instances for each file listed
                 	foreach ($line in $input) {
                 	    Write-Host "$line, $filepath"
-                		if (!$line.startsWith("#"))  {
+                		if (!$line.startsWith("#") -and $line.trim() -ne "")  {
                             if ($line.Contains("|")) {
                                 # parse the source directory path and filename
                                 $filepath,$fullfileName=$line.Split("|",2)
@@ -209,7 +221,7 @@ function Main
                                 Copy-Item $filepath\$fullfileName -Destination $repoWorkingDir -PassThru
                             }
                             else {
-                                Write-Error "Could not find file: " + $filepath\$fullfileName
+                                Write-Host "Could not find file: " + $filepath\$fullfileName
                                 exit 1
                             }
                 
@@ -230,7 +242,7 @@ function Main
                 			    Remove-Item $repoWorkingDir\$fullfileName -Force
                 		    }
                 		    else {
-                			    write-error "Deploy type is not tco or tco shared, exiting."
+                			    Write-Host "Deploy type is not tco or tco shared, exiting."
                 			    exit 1
                 		    }
                 		}
@@ -298,7 +310,7 @@ function ProcessInput {
                 $filepath,$fullfileName=$line.Split("|",2)
             }
             else {
-                #$filepath="."
+                $filepath=$naspath + "\" + $directory
                 $fullfileName=$line
             }
 			Write-Host "Creating instance for file $fullfileName"
@@ -318,10 +330,11 @@ function ProcessInput {
 
             # Retreiving files to work directory
             if (Test-Path $filepath\$fullfileName) {
-                Copy-Item $filepath\$fullfileName -Destination $repoWorkingDir
+                Write-Host "Found  $filepath\$fullfileName"
+                Copy-Item $filepath\$fullfileName -Destination $repoWorkingDir -PassThru
             }
             else {
-                Write-Error "Could not find file: " + $filepath\$fullfileName
+                Write-Host "Could not find file: " + $filepath\$fullfileName
                 exit 1
             }
 
@@ -335,13 +348,14 @@ function ProcessInput {
 				    $tcosharedInstances += $fileName
 			    }
 			    $buildIDs += $buildID
+			    Write-Host "CreateInstance with - $deployType $eType $buildID $fileName"
 			    CreateInstance $deployType $eType $buildID $fileName
 			    
 			    # Cleanup on aisle 3, the zip file spill
-			    Remove-Item $repoWorkingDir\$fullfileName
+			    Remove-Item $repoWorkingDir\$fullfileName -Force
 		    }
 		    else {
-			    write-error "Deploy type is not tco or tco shared, exiting."
+			    Write-Host "Deploy type is not tco or tco shared, exiting."
 			    exit 1
 		    }
 		}
@@ -366,7 +380,7 @@ function ProcessInput {
 }
 
 function CreateRepo($tcoList,$tcosharedList) {
-	# Interface with API to create Instance
+	# Interface with API to create Repo
 
 	# Generate Repo Name, Create repo
 
@@ -377,21 +391,40 @@ function CreateRepo($tcoList,$tcosharedList) {
 
 	$repoName = $repoName + "_[" + $(get-date -f "yyyy-MM-dd_HH:mm:ss") + "]"
 
-	write-host "Repo Name is $repoName"
+	Write-Host "Repo Name is $repoName"
 
-	write-host "repo add $repoRole $repoName"
+	Write-Host "repo add $repoRole $repoName"
 	RunAPICommand "repo add $repoRole $repoName"
 	
-	write-host "Adding instances to repo $repoName"
+	Write-Host "Adding instances to repo $repoName"
 
 	# Add instances to Repo
+	$WebSiteBackupPackage = if ($envType -eq "QA") { $ecomWebSiteBackupPackageQA } else { $ecomWebSiteBackupPackage }
+	$PackageName = if ($envType -eq "QA") { $tcoPackageNameQA } else { $tcoPackageName }
+	$sharedPackageName = if ($envType -eq "QA") { $tcosharedPackageNameQA } else { $tcosharedPackageName }
+	$WebContentPushPackage = if ($envType -eq "QA") { $ecomWebContentPushPackageQA } else { $ecomWebContentPushPackage }
+	$WebSyncPackage = if ($envType -eq "QA") { $ecomWebSyncPackageQA } else { $ecomWebSyncPackage }
+    $RepoNameFormat= if ($envType -eq "QA") { "eComQARepoDeploy_%Y%m%d.[#]" } else { "eComProdRepoDeploy_%Y%m%d.[#]" }
 	
+    if ($envType -ne "QA" ) {
+    	# Add Prod Init Hold package to Repo
+    	Write-Host "Adding instance of $ecomProdInitHoldPackage to $repoName"
+    	Write-host "repo artifact add instance $repoName ${ecomProdInitHoldPackage}:Master.1"
+    	RunAPICommand "repo artifact add instance $repoName ${ecomProdInitHoldPackage}:Master.1"
+    	start-sleep -m 1000
+    	$lastPackInst = $ecomProdInitHoldPackage + ":Master.1" 
+    }
+
 	# Add WebSite Backup package to Repo
-	write-host "Adding instance of $ecomWebSiteBackupPackage to $repoName"
-	Write-host "repo artifact add instance $repoName ${ecomWebSiteBackupPackage}:Master.1"
-	RunAPICommand "repo artifact add instance $repoName ${ecomWebSiteBackupPackage}:Master.1"
+	Write-Host "Adding instance of $WebSiteBackupPackage to $repoName"
+	Write-host "repo artifact add instance $repoName ${WebSiteBackupPackage}:Master.1"
+	RunAPICommand "repo artifact add instance $repoName ${WebSiteBackupPackage}:Master.1"
 	start-sleep -m 1000
-	$lastPackInst = $ecomWebSiteBackupPackage + ":Master.1" 
+    if ($envType -ne "QA" ) {
+    	write-host "repo artifact depend add $repoName ${WebSiteBackupPackage}:Master.1 $lastPackInst"
+    	RunAPICommand "repo artifact depend add $repoName ${WebSiteBackupPackage}:Master.1 $lastPackInst"
+    }
+	$lastPackInst = $WebSiteBackupPackage + ":Master.1" 
 	
 	$last = $nul
 	$setDepend = $true
@@ -400,18 +433,18 @@ function CreateRepo($tcoList,$tcosharedList) {
 		write-host "-----------------------------------"
 
 		# add instance to repo
-		write-host "repo artifact add instance $repoName ${tcoPackageName}:${inst}"
-		RunAPICommand "repo artifact add instance $repoName ${tcoPackageName}:${inst}"
+		write-host "repo artifact add instance $repoName ${PackageName}:${inst}"
+		RunAPICommand "repo artifact add instance $repoName ${PackageName}:${inst}"
 		start-sleep -m 1000
 		if ($setDepend) {
-			write-host "repo artifact depend add $repoName ${tcoPackageName}:${inst} $lastPackInst"
-			#RunAPICommand "repo artifact depend add $repoName ${tcoPackageName}:${inst} ${tcoPackageName}:${last}"
-			RunAPICommand "repo artifact depend add $repoName ${tcoPackageName}:${inst} $lastPackInst"
+			write-host "repo artifact depend add $repoName ${PackageName}:${inst} $lastPackInst"
+			#RunAPICommand "repo artifact depend add $repoName ${PackageName}:${inst} ${tcoPackageName}:${last}"
+			RunAPICommand "repo artifact depend add $repoName ${PackageName}:${inst} $lastPackInst"
 		}
 		$last = $inst
 		$setDepend = $true
 		# Keep the last package instance added to repo
-		$lastPackInst = $tcoPackageName + ":" + $last
+		$lastPackInst = $PackageName + ":" + $last
 	}
 
 	$last = $nul
@@ -421,62 +454,66 @@ function CreateRepo($tcoList,$tcosharedList) {
 		write-host "-----------------------------------"
 
 		# add instance to repo
-		write-host "repo artifact add instance $repoName ${tcosharedPackageName}:${inst}"
-		RunAPICommand "repo artifact add instance $repoName ${tcosharedPackageName}:${inst}"
+		write-host "repo artifact add instance $repoName ${sharedPackageName}:${inst}"
+		RunAPICommand "repo artifact add instance $repoName ${sharedPackageName}:${inst}"
 		start-sleep -m 1000
 		if ($setDepend) {
-			write-host "repo artifact depend add $repoName ${tcosharedPackageName}:${inst} $lastPackInst"
-			#RunAPICommand "repo artifact depend add $repoName ${tcosharedPackageName}:${inst} ${tcosharedPackageName}:${last}"
-			RunAPICommand "repo artifact depend add $repoName ${tcosharedPackageName}:${inst} $lastPackInst"
+			write-host "repo artifact depend add $repoName ${sharedPackageName}:${inst} $lastPackInst"
+			#RunAPICommand "repo artifact depend add $repoName ${sharedPackageName}:${inst} ${tcosharedPackageName}:${last}"
+			RunAPICommand "repo artifact depend add $repoName ${sharedPackageName}:${inst} $lastPackInst"
 		}
 		$last = $inst
 		$setDepend = $true
 		# Keep the last package instance added to repo
-		$lastPackInst = $tcosharedPackageName + ":" + $last
+		$lastPackInst = $sharedPackageName + ":" + $last
 	}
 
 	# Add Web Content Update package to Repo
-	write-host "Adding instance of $ecomWebContentPushPackage to $repoName"
-	Write-host "repo artifact add instance $repoName ${ecomWebContentPushPackage}:Master.1"
-	RunAPICommand "repo artifact add instance $repoName ${ecomWebContentPushPackage}:Master.1"
+	write-host "Adding instance of $WebContentPushPackage to $repoName"
+	Write-host "repo artifact add instance $repoName ${WebContentPushPackage}:Master.1"
+	RunAPICommand "repo artifact add instance $repoName ${WebContentPushPackage}:Master.1"
 	start-sleep -m 1000
-	write-host "repo artifact depend add $repoName ${ecomWebContentPushPackage}:Master.1 $lastPackInst"
-	RunAPICommand "repo artifact depend add $repoName ${ecomWebContentPushPackage}:Master.1 $lastPackInst"
-	$lastPackInst = $ecomWebContentPushPackage + ":Master.1"
+	write-host "repo artifact depend add $repoName ${WebContentPushPackage}:Master.1 $lastPackInst"
+	RunAPICommand "repo artifact depend add $repoName ${WebContentPushPackage}:Master.1 $lastPackInst"
+	$lastPackInst = $WebContentPushPackage + ":Master.1"
 	
 	# Add Web Sync package to the Repo
-	write-host "Adding instance of $ecomWebSyncPackage to $repoName"
-	Write-host "repo artifact add instance $repoName ${ecomWebSyncPackage}:Master.1"
-	RunAPICommand "repo artifact add instance $repoName ${ecomWebSyncPackage}:Master.1"
+	write-host "Adding instance of $WebSyncPackage to $repoName"
+	Write-host "repo artifact add instance $repoName ${WebSyncPackage}:Master.1"
+	RunAPICommand "repo artifact add instance $repoName ${WebSyncPackage}:Master.1"
 	start-sleep -m 1000
-	write-host "repo artifact depend add $repoName ${ecomWebSyncPackage}:Master.1 $lastPackInst"
-	RunAPICommand "repo artifact depend add $repoName ${ecomWebSyncPackage}:Master.1 $lastPackInst"
+	write-host "repo artifact depend add $repoName ${WebSyncPackage}:Master.1 $lastPackInst"
+	RunAPICommand "repo artifact depend add $repoName ${WebSyncPackage}:Master.1 $lastPackInst"
 
-	# Add Web Sync Repo for Prod to the Daily Repo
-	write-host "Adding instance of $ecomWebSyncLBRepo to $repoName"
-	Write-host "repo artifact add instance $repoName ${ecomWebSyncLBRepo}:Master.1"
-	RunAPICommand "repo artifact add instance $repoName ${ecomWebSyncLBRepo}:Master.1"
-	start-sleep -m 1000
-	write-host "repo artifact depend add $repoName ${ecomWebSyncLBRepo}:Master.1 $lastPackInst"
-	RunAPICommand "repo artifact depend add $repoName ${ecomWebSyncLBRepo}:Master.1 $lastPackInst"
+    if ($envType -ne "QA" ) {
+        # Only for nonQA repos
+    	# Add Web Sync Repo for Prod to the Daily Repo
+    	write-host "Adding instance of $ecomWebSyncLBRepo to $repoName"
+    	Write-host "repo artifact add instance $repoName ${ecomWebSyncLBRepo}:Master.1"
+    	RunAPICommand "repo artifact add instance $repoName ${ecomWebSyncLBRepo}:Master.1"
+    	start-sleep -m 1000
+    	write-host "repo artifact depend add $repoName ${ecomWebSyncLBRepo}:Master.1 $lastPackInst"
+    	RunAPICommand "repo artifact depend add $repoName ${ecomWebSyncLBRepo}:Master.1 $lastPackInst"
+    }
 
-    #write-host "Creating Instance from repo $repoName"
-    #write-host "--------------------------------------"
-    #write-host "instance create repo $repoName"
-    #RunAPICommand "instance create repo $repoName"
+    Write-host "repo nameformat $repoName ${RepoNameFormat}"
+    RunAPICommand "repo nameformat $repoName ${RepoNameFormat}"
+    start-sleep -m 1000
 
 }
 
 function CreateInstance($dtype,$etype,$bid,$instName) {
-	# Interface with API to create Repo
+	# Interface with API to create Instance
 
 	$package=$nul
-
+	
 	if ($dtype -eq "tco")  {
-		$package = $tcoPackageName
+	    $package = if ($envType -eq "QA") { $tcoPackageNameQA } else { $tcoPackageName }
+		#$package = $tcoPackageName
 	}
 	elseif ($dtype -eq "tcoshared")  {
-		$package = $tcosharedPackageName
+	    $package = if ($envType -eq "QA") { $tcosharedPackageNameQA } else { $tcosharedPackageName }
+		#$package = $tcosharedPackageName
 	}
 	
 	Write-Host "Instance name is $instName for Package $package"
@@ -524,15 +561,15 @@ function CreateInstance($dtype,$etype,$bid,$instName) {
 			$ready = $true
 		}
 		if ($checkReady.Contains("Error"))  {
-			Write-Error "Error creating instance ${package}:${instName}"
+			Write-Host "Error creating instance ${package}:${instName}"
 			exit 1
 		}
 		if ($checkReady.Contains("Object not found"))  {
-			Write-Error "Object not found creating instance ${package}:${instName}"
+			Write-Host "Object not found creating instance ${package}:${instName}"
 			exit 1
 		}
 	}
-	write-host "Instance ${package}:${instName} created successfully"	
+	Write-host "Instance ${package}:${instName} created successfully"	
 
 
 	# return instanceName
